@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #
 # A poor mans implementation of AES256-CBC. This is just for fun. 
 # If you want a proper AES library, use something like PyCrytodome.
@@ -13,6 +14,7 @@ FILE_BLOCK_SIZE = 16        # 128 bits
 KEY_SIZE = 32               # 256 bits
 ROUNDS = 14                 # Number of rounds to do. It's 14 in the case of AES256-CBC
 
+# The sbox substitution table
 sbox = [
         0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
         0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -32,6 +34,7 @@ sbox = [
         0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
         ]
 
+# The inverse sbox substitution table
 sboxInv = [
         0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
         0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -51,6 +54,8 @@ sboxInv = [
         0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
         ]
 
+
+# rcon table
 rcon = [
         0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a,
         0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39,
@@ -70,7 +75,7 @@ rcon = [
         0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb
         ]
 
-# Open *.dat file and chop the file into 128bit chunks.
+# Open *.dat file and chop the file into 128 bit chunks.
 #
 def read_file(file):
     f = open(file, 'rb')
@@ -112,61 +117,59 @@ def sub_word(block):
         #print(output_bytes)
     return output_bytes
 
-# Create round keys from the original cipher key (SHA256 hash of the password). This expanded key table is 240 bytes in size for AES256
+# Create all round keys from the original cipher key. This expanded key table is 240 bytes in size for AES256. 16 bytes from the original key + 14 rounds of 16 bytes.
 def expand_key():
     key = gen_key(PASSWORD)
     allkeys = key[:16] 
-    print("All Keys is: ", allkeys)
-    print("Lengh of all keys is: ", len(allkeys))
-    
+  
     for x in range(14): # Repeat the process 14 times to create 14 round keys.
-        index = x * 16
-        ri = x * 4
+        index = x * 16 # Index to step through 16 bytes at a time
+        ri = x * 4 # rcon index to step through 4 bytes at a time
         
         # 1st word (4 bytes) in the 16 byte block 
-        print('index: ', index)
         t = allkeys[-4:]        # Temporary holds last 4 bytes of the list.
         t = rotate_word(t, 1) # Apply 1 step rotation to the four last values
         t = sub_word(t) # Subsitute the values in t with sbox substitution
-
         w1 = allkeys[0+index:4+index]
-        print('w1: ', w1)
-        print('t: ', t)
-        print('rcon: ', rcon[0+ri:4+ri])
         w5 = [0,0,0,0]
-        for i in range(0,3):    # XOR the 1st word in the array with t and again with rcon, to create 5th word.
+        for i in range(4):    # XOR the 1st word in the array with t and again with rcon, to create 5th word.
             w5[i] = w1[i] ^ t[i] ^ rcon[i+ri]
-        print('w5:', w5)
         allkeys.extend(w5) # Add the newly generated 5th word to the existing key array.
-        print(allkeys)
+
     
         # 2nd word in the 16 byte block
         w2 = allkeys[4+index:8+index]
-        print('w2: ', w2)
         w6 = [0,0,0,0]
-        for i in range(0,3):
+        for i in range(4):
             w6[i] = w2[i] ^ w5[i]
-        print('w6: ', w6)
         allkeys.extend(w6) # Add the newly generated 6th word to the existing key array.
         
         
         # 3rd word in the 16 byte block
         w3 = allkeys[8+index:12+index]
-        print('w3:', w3)
         w7 = [0,0,0,0]
-        for i in range(0,3):
+        for i in range(4):
             w7[i] = w3[i] ^ w6[i]
-        print('w7: ', w7)
         allkeys.extend(w7) # Add the newly generated 7th word to the existing key array.
 
         # 4th 4 bytes in the 16 byte block
         w4 = allkeys[12+index:16+index]
-        print('w4: ', w4)
         w8 = [0,0,0,0]
-        for i in range(0,3):
+        for i in range(4):
             w8[i] = w4[i] ^ w7[i]
-        print('w8: ', w8)
         allkeys.extend(w8) # Add the newly generated 8th word to the existing key array.
+
+        print('index: ', index)    
+        print('w1: ', w1)
+        print('t: ', t)
+        print('rcon: ', rcon[0+ri:4+ri])
+        print('w2: ', w2)
+        print('w3: ', w3)
+        print('w4: ', w4)
+        print('w5: ', w5)
+        print('w6: ', w6)
+        print('w7: ', w7)
+        print('w8: ', w8)
     
     return allkeys
         
