@@ -92,7 +92,8 @@ def read_file(file):
 def padding(data):
     pad_size = ((FILE_BLOCK_SIZE - len(data)) % FILE_BLOCK_SIZE)
     padded_data = data + (str(pad_size) * pad_size).encode('utf-8')
-    print(padded_data)
+    pd = list(padded_data)
+    print(pd)
 
 
 # Generate the 256 bit key using SHA256 from the given password
@@ -117,12 +118,34 @@ def sub_word(block):
         #print(output_bytes)
     return output_bytes
 
+# Shift rows for a 16 byte block of data
+def shift_rows(block):
+    row0 = block[0:13:4]        # Extract the rows from the array
+    row1 = block[1:14:4]
+    row2 = block[2:15:4]
+    row3 = block[3:16:4]
+
+    row1 = rotate_word(row1, 1) # Rotate to the left by one byte
+    row2 = rotate_word(row2, 2) # Rotate by two bytes
+    row3 = rotate_word(row3, 3) # Rotate by three bytes
+
+    reassemble_block = []       # Reassemble the 1D array from the rows. Perhaps I should have done 2D arrays... :O
+    for i in range(4):
+        magic = [row0, row1, row2, row3]
+        for j in magic:
+            reassemble_block.append(j[i])
+    return reassemble_block
+
+# Mix Columns for a 16 byte block of data
+def mix_columns(block):
+    pass
+
 # Create all round keys from the original cipher key. This expanded key table is 240 bytes in size for AES256. 16 bytes from the original key + 14 rounds of 16 bytes.
 def expand_key():
     key = gen_key(PASSWORD)
     allkeys = key[:16] 
   
-    for x in range(14): # Repeat the process 14 times to create 14 round keys.
+    for x in range(ROUNDS): # Repeat the process 14 times to create 14 round keys.
         index = x * 16 # Index to step through 16 bytes at a time
         ri = x * 4 # rcon index to step through 4 bytes at a time
         
@@ -131,7 +154,7 @@ def expand_key():
         t = rotate_word(t, 1) # Apply 1 step rotation to the four last values
         t = sub_word(t) # Subsitute the values in t with sbox substitution
         w1 = allkeys[0+index:4+index]
-        w5 = [0,0,0,0]
+        w5 = [0] * 4  # Initialise an empty list of 4 bytes.
         for i in range(4):    # XOR the 1st word in the array with t and again with rcon, to create 5th word.
             w5[i] = w1[i] ^ t[i] ^ rcon[i+ri]
         allkeys.extend(w5) # Add the newly generated 5th word to the existing key array.
@@ -139,49 +162,69 @@ def expand_key():
     
         # 2nd word in the 16 byte block
         w2 = allkeys[4+index:8+index]
-        w6 = [0,0,0,0]
+        w6 = [0] * 4
         for i in range(4):
-            w6[i] = w2[i] ^ w5[i]
+            w6[i] = w2[i] ^ w5[i] # XOR the list of 4 bytes
         allkeys.extend(w6) # Add the newly generated 6th word to the existing key array.
         
         
         # 3rd word in the 16 byte block
         w3 = allkeys[8+index:12+index]
-        w7 = [0,0,0,0]
+        w7 = [0] * 4
         for i in range(4):
             w7[i] = w3[i] ^ w6[i]
         allkeys.extend(w7) # Add the newly generated 7th word to the existing key array.
 
         # 4th 4 bytes in the 16 byte block
         w4 = allkeys[12+index:16+index]
-        w8 = [0,0,0,0]
+        w8 = [0] * 4
         for i in range(4):
             w8[i] = w4[i] ^ w7[i]
         allkeys.extend(w8) # Add the newly generated 8th word to the existing key array.
 
-        print('index: ', index)    
-        print('w1: ', w1)
-        print('t: ', t)
-        print('rcon: ', rcon[0+ri:4+ri])
-        print('w2: ', w2)
-        print('w3: ', w3)
-        print('w4: ', w4)
-        print('w5: ', w5)
-        print('w6: ', w6)
-        print('w7: ', w7)
-        print('w8: ', w8)
+        # print('index: ', index)    
+        # print('w1: ', w1)
+        # print('t: ', t)
+        # print('rcon: ', rcon[0+ri:4+ri])
+        # print('w2: ', w2)
+        # print('w3: ', w3)
+        # print('w4: ', w4)
+        # print('w5: ', w5)
+        # print('w6: ', w6)
+        # print('w7: ', w7)
+        # print('w8: ', w8)
     
     return allkeys
         
 
+def encrypt(block):
+    keyschedule = expand_key()
+    
+    # AES pre-whitening phase
+    p1 = [0] * 16   # Initialise a 16 byte list to contain the 1st round encrypted data.
+    for i in range(16):
+        p1[i] = block[i] ^ keyschedule[i]   # XOR the input data with the original cipher key.
+    print(p1)
+    
+    # Substitute sbox phase
+    p1 = sub_word(p1)
+    print(p1)
+    
+    # Shift Rows phase
+    p2 = shift_rows(p1)
+    print(p2)
+    # Mix Columns phase
+
 
 
 # Main program execution
-read_file('data.dat')
+
+
+#read_file('data.dat')
+DATA = [72, 101, 108, 108, 111, 32, 65, 69, 83, 33, 32, 84, 104, 105, 115, 32]
+
+
+encrypt(DATA)
 
 
 
-
-
-
-print(expand_key())
