@@ -2,7 +2,7 @@
 #
 # A poor mans implementation of AES256-CBC. This is just for fun. 
 # If you want a proper AES library, use something like PyCrytodome.
-# This youtube video helped me loads to understand the maths  - https://youtu.be/gP4PqVGudtg
+# 
 #
 # by Simon Bonham - May 2020
 #
@@ -13,7 +13,7 @@ import random
 PASSWORD='SuperSecret'
 FILE_BLOCK_SIZE = 16        # 128 bits
 KEY_SIZE = 32               # 256 bits
-ROUNDS = 14                 # Number of rounds to do. It's 14 in the case of AES256-CBC
+ROUNDS = 10                 # Number of rounds to do. It's 14 in the case of AES256-CBC
 
 # The sbox substitution table
 sbox = [
@@ -207,30 +207,50 @@ def expand_key():
 
 def encrypt(block):
     keyschedule = expand_key()
+    cipher = []
     
-    # AES pre-whitening phase
+    # AES pre-whitening round
     p0 = [0] * 16   # Initialise a 16 byte list to contain the 1st round encrypted data.
     for i in range(16):
         p0[i] = block[i] ^ keyschedule[i]   # XOR the input data with the original cipher key.
-    print('[{}]'.format(', '.join(hex(x) for x in p0)))
-    
-    # Substitute sbox phase
-    p1 = sub_word(p0)
-    print('[{}]'.format(', '.join(hex(x) for x in p1)))
-    
-    # Shift Rows phase
-    p2 = shift_rows(p1)
-    print('[{}]'.format(', '.join(hex(x) for x in p2)))
-    
-    # Mix Columns phase
-    p3 = mix_columns(p2)
-    print('[{}]'.format(', '.join(hex(x) for x in p3)))
+    cipher = p0
 
-    p4 = [0] * 16   # Initialise a 16 byte list for the start of the next round.
+    
+
+    # 13 Additional rounds in the case of AES256
+    for i in range(ROUNDS-1):   
+        offset = i * 16 + 16    # Find the correct location for the key schedule
+       
+        # Substitute sbox phase
+        p1 = sub_word(cipher)
+        
+        # Shift Rows phase
+        p2 = shift_rows(p1)
+        
+        # Mix Columns phase
+        p3 = mix_columns(p2)
+
+        # XOR the input data with the Round generated key.
+        p4 = [0] * 16   # Initialise a 16 byte list for the start of the next round.
+        for i in range(16):
+            p4[i] = p3[i] ^ keyschedule[i+offset]   
+        cipher = p4     #   Make p4 the cipher for the new round.
+    
+
+    # Final round
+    #
+    # Substitute sbox phase
+    cipher = sub_word(cipher)
+    # Shift Rows phase
+    cipher = shift_rows(cipher)
+
+    p5 = [0] * 16   # Initialise a 16 byte list for the last XOR.
     for i in range(16):
-        p4[i] = p3[i] ^ keyschedule[i+16]   # XOR the input data with the Round 1 generated key.
-    print('[{}]'.format(', '.join(hex(x) for x in p4)))
-    print('[{}]'.format(', '.join(hex(x) for x in keyschedule)))
+        p5[i] = cipher[i] ^ keyschedule[ROUNDS * 16 + i]  
+    print('p5: ' + '[{}]'.format(', '.join(hex(x) for x in p5)))
+    return p5
+
+
 
 # Main program execution
 
