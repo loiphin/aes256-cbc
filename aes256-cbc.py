@@ -8,7 +8,7 @@
 #
 import hashlib
 import random
-
+import time
 
 PASSWORD='SuperSecret'
 FILE_BLOCK_SIZE = 16        # 128 bits
@@ -61,16 +61,6 @@ sboxinv = [
 rcon = [ 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x1b, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x6c, 0x00, 0x00, 0x00, 0xd8, 0x00, 0x00, 0x00, 0xab, 0x00, 0x00, 0x00, 0x4d, 0x00, 0x00, 0x00]
 
 
-# Open *.dat file and chop the file into 128 bit chunks.
-#
-def read_file(file):
-    f = open(file, 'rb')
-    chunk = f.read(FILE_BLOCK_SIZE)
-    while chunk:
-        padding(chunk)    # Send that particular chunk to be encrypted.
-        chunk = f.read(FILE_BLOCK_SIZE)
-    f.close()
-
 
 # PKCS#7 Padding function
 # Get the length of padding required, and pad with n number of characters using character n as the pad.
@@ -79,7 +69,7 @@ def padding(data):
     pad_size = ((FILE_BLOCK_SIZE - len(data)) % FILE_BLOCK_SIZE)
     padded_data = data + (str(pad_size) * pad_size).encode('utf-8')
     pd = list(padded_data)
-    print(pd)
+    return pd
 
 
 # Generate the 256 bit key using SHA256 from the given password
@@ -350,15 +340,51 @@ def test():
         print("Decryption works!")
 
 
+# Open the files and start the encryption process.
+#
+def encrypt_file(file, file2):
+    st = time.perf_counter()    # Start the timer
+    f = open(file, 'rb')
+    g = open(file2, 'wb')
+    chunk = f.read(FILE_BLOCK_SIZE)
+    while chunk:
+        piece = padding(chunk)    # Pad the 32 bit block of data if necessary.
+        enc_piece = bytes(encrypt(piece)) # Perform the encryption operation.
+        g.write(enc_piece)                  # Write to the file.
+        chunk = f.read(FILE_BLOCK_SIZE)
+    f.close()
+    g.close()
+    et = time.perf_counter()    # Stop the timer
+    print(f"Time take to encrypt: {et - st:0.4f} seconds")
+
+
+# Open the files and start the decryption process.
+#
+def decrypt_file(file, file2):
+    st = time.perf_counter()    # Start the timer
+    f = open(file, 'rb')
+    g = open(file2, 'wb')
+    chunk = f.read(FILE_BLOCK_SIZE)
+    while chunk:
+        dec_piece = bytes(decrypt(chunk))
+        g.write(dec_piece)
+        chunk = f.read(FILE_BLOCK_SIZE)
+    f.close()
+    g.close()
+    et = time.perf_counter()    # Stop the timer
+    print(f"Time take to decrypt: {et - st:0.4f} seconds")
+
 
 
 
 
 # Main program execution
 
+# test()        # Uncomment to run a test
 
-#read_file('data.dat')
-test()
+encrypt_file('1mb_random.dat', '1mb_random.aes')
+decrypt_file('1mb_random.aes', '1mb_random2.dat')
+
 
 
 
