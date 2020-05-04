@@ -36,7 +36,7 @@ sbox = [
         ]
 
 # The inverse sbox substitution table
-sboxInv = [
+sboxinv = [
         0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
         0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
         0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3, 0x4e,
@@ -103,6 +103,16 @@ def sub_word(block):
         #print(output_bytes)
     return output_bytes
 
+# Read in a 16 byte block of data and substitute according to the sboxinv table.
+def sub_wordinv(block):
+    output_bytes = []
+    for i in block:
+        high, low = i >> 4, i & 0x0F
+        #print(hex(high), hex(low))
+        output_bytes.append(sboxinv[16 * high + low])
+        #print(output_bytes)
+    return output_bytes
+
 # Galois Multiplication
 def galois(a, b):
     p = 0
@@ -135,15 +145,44 @@ def shift_rows(block):
             reassemble_block.append(j[i])
     return reassemble_block
 
+# Inverse Shift rows for a 16 byte block of data
+def shift_rowsinv(block):
+    row0 = block[0:13:4]        # Extract the rows from the array
+    row1 = block[1:14:4]
+    row2 = block[2:15:4]
+    row3 = block[3:16:4]
+
+    row1 = rotate_word(row1, -1) # Rotate to the right by one byte
+    row2 = rotate_word(row2, -2) # Rotate by two bytes
+    row3 = rotate_word(row3, -3) # Rotate by three bytes
+
+    reassemble_block = []      
+    for i in range(4):
+        magic = [row0, row1, row2, row3]
+        for j in magic:
+            reassemble_block.append(j[i])
+    return reassemble_block
+
 # Mix Columns for a 16 byte block of data
 def mix_columns(block):
     output = []
     for i in range(0,16,4):
-        output.append(galois(0x02, block[i]) ^ galois(0x03, block[i+1]) ^ galois(0x01, block[i+2]) ^ galois(0x01, block[i+3]))
-        output.append(galois(0x01, block[i]) ^ galois(0x02, block[i+1]) ^ galois(0x03, block[i+2]) ^ galois(0x01, block[i+3]))
-        output.append(galois(0x01, block[i]) ^ galois(0x01, block[i+1]) ^ galois(0x02, block[i+2]) ^ galois(0x03, block[i+3]))
-        output.append(galois(0x03, block[i]) ^ galois(0x01, block[i+1]) ^ galois(0x01, block[i+2]) ^ galois(0x02, block[i+3]))
+        output.append(galois(2, block[i]) ^ galois(3, block[i+1]) ^ galois(1, block[i+2]) ^ galois(1, block[i+3]))
+        output.append(galois(1, block[i]) ^ galois(2, block[i+1]) ^ galois(3, block[i+2]) ^ galois(1, block[i+3]))
+        output.append(galois(1, block[i]) ^ galois(1, block[i+1]) ^ galois(2, block[i+2]) ^ galois(3, block[i+3]))
+        output.append(galois(3, block[i]) ^ galois(1, block[i+1]) ^ galois(1, block[i+2]) ^ galois(2, block[i+3]))
     return output
+
+# Inverse Mix Columns for a 16 byte block of data
+def mix_columnsinv(block):
+    output = []
+    for i in range(0,16,4):
+        output.append(galois(14, block[i]) ^ galois(11, block[i+1]) ^ galois(13, block[i+2]) ^ galois(9, block[i+3]))
+        output.append(galois(9, block[i]) ^ galois(14, block[i+1]) ^ galois(11, block[i+2]) ^ galois(13, block[i+3]))
+        output.append(galois(13, block[i]) ^ galois(9, block[i+1]) ^ galois(14, block[i+2]) ^ galois(11, block[i+3]))
+        output.append(galois(11, block[i]) ^ galois(13, block[i+1]) ^ galois(9, block[i+2]) ^ galois(14, block[i+3]))
+    return output
+
 
 
 
@@ -217,7 +256,7 @@ def encrypt(block):
 
     
 
-    # 13 Additional rounds in the case of AES256
+    # Additional rounds in the case of AES256
     for i in range(ROUNDS-1):   
         offset = i * 16 + 16    # Find the correct location for the key schedule
        
@@ -247,8 +286,49 @@ def encrypt(block):
     p5 = [0] * 16   # Initialise a 16 byte list for the last XOR.
     for i in range(16):
         p5[i] = cipher[i] ^ keyschedule[ROUNDS * 16 + i]  
-    print('p5: ' + '[{}]'.format(', '.join(hex(x) for x in p5)))
     return p5
+
+def decrypt(block):
+    keyschedule = expand_key()
+    data = []
+
+    # Cipher XOR'd with the final round key
+    p0 = [0] * 16   # Initialise a 16 byte list to contain the 1st round encrypted data.
+    for i in range(16):
+        p0[i] = block[i] ^ keyschedule[ROUNDS * 16 + i]   # XOR the input data with the original cipher key.
+    data = p0
+
+    # Additional rounds in the case of AES256
+    for i in reversed(range(ROUNDS-1)):   
+        offset = i * 16 + 16    # Find the correct location for the key schedule
+       
+        # Shift Rows Inverse phase
+        p1 = shift_rowsinv(data)
+        
+        # Substitute sbox Inverse
+        p2 = sub_wordinv(p1)     
+        
+        # XOR the input data with the Round generated key.
+        p3 = [0] * 16   # Initialise a 16 byte list for the start of the next round.
+        for i in range(16):
+            p3[i] = p2[i] ^ keyschedule[i+offset]   
+        
+        # Inverse Mix Columns phase
+        p4 = mix_columnsinv(p3)
+        data = p4     #   Make p4 the data for the new round.
+
+    # Final round
+    #
+    # Invert Shift Rows phase
+    data = shift_rowsinv(data)
+    # Substitute sbox phase
+    data = sub_wordinv(data)
+
+    p5 = [0] * 16   # Initialise a 16 byte list for the last XOR.
+    for i in range(16):
+        p5[i] = data[i] ^ keyschedule[i]  
+    return p5
+
 
 
 
@@ -257,9 +337,14 @@ def encrypt(block):
 
 #read_file('data.dat')
 TEST = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34]
+CIPHER = [0x39, 0x25, 0x84, 0x1d, 0x2, 0xdc, 0x9, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0xb, 0x32]
 
-
-encrypt(TEST)
+a = encrypt(TEST)
+if a == CIPHER:
+    print("Encryption works!")
+b = decrypt(CIPHER)
+if b == TEST:
+    print("Decryption works!")
 
 
 
