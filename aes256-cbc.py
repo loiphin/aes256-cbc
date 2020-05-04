@@ -13,7 +13,8 @@ import random
 PASSWORD='SuperSecret'
 FILE_BLOCK_SIZE = 16        # 128 bits
 KEY_SIZE = 32               # 256 bits
-ROUNDS = 10                 # Number of rounds to do. It's 14 in the case of AES256-CBC
+ROUNDS = 14                 # Number of rounds to do. It's 14 in the case of AES256-CBC
+TEST_MODE = 0               # Used for the test function.
 
 # The sbox substitution table
 sbox = [
@@ -183,15 +184,17 @@ def mix_columnsinv(block):
         output.append(galois(11, block[i]) ^ galois(13, block[i+1]) ^ galois(9, block[i+2]) ^ galois(14, block[i+3]))
     return output
 
-
-
-
-
 # Create all round keys from the original cipher key. This expanded key table is 240 bytes in size for AES256. 16 bytes from the original key + 14 rounds of 16 bytes.
 def expand_key():
     key = gen_key(PASSWORD)
-    #allkeys = key[:16] 
-    allkeys = [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x9, 0xcf, 0x4f, 0x3c] # TEST DATA, REMOVE WHEN DONE AND UNCOMMENT ABOVE LINE
+    
+    if TEST_MODE == 1:
+        allkeys = [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x9, 0xcf, 0x4f, 0x3c] # Sets the key to a pre-defined value for the test function.
+    else:
+        allkeys = key[:16] 
+     
+    
+    
     for x in range(ROUNDS): # Repeat the process 14 times to create 14 round keys.
         index = x * 16 # Index to step through 16 bytes at a time
         ri = x * 4 # rcon index to step through 4 bytes at a time
@@ -243,7 +246,7 @@ def expand_key():
     
     return allkeys
         
-
+# AES Encryption
 def encrypt(block):
     keyschedule = expand_key()
     cipher = []
@@ -288,6 +291,7 @@ def encrypt(block):
         p5[i] = cipher[i] ^ keyschedule[ROUNDS * 16 + i]  
     return p5
 
+# AES Decryption
 def decrypt(block):
     keyschedule = expand_key()
     data = []
@@ -330,21 +334,33 @@ def decrypt(block):
     return p5
 
 
+# A quick test using pre-calculated data to compare with.
+def test():
+    global TEST_MODE, ROUNDS
+    TEST_MODE = 1
+    ROUNDS = 10
+    TEST = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34]
+    CIPHER = [0x39, 0x25, 0x84, 0x1d, 0x2, 0xdc, 0x9, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0xb, 0x32]
+
+    a = encrypt(TEST)
+    if a == CIPHER:
+        print("Encryption works!")
+    b = decrypt(CIPHER)
+    if b == TEST:
+        print("Decryption works!")
+
+
+
+
 
 
 # Main program execution
 
 
 #read_file('data.dat')
-TEST = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34]
-CIPHER = [0x39, 0x25, 0x84, 0x1d, 0x2, 0xdc, 0x9, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0xb, 0x32]
+test()
 
-a = encrypt(TEST)
-if a == CIPHER:
-    print("Encryption works!")
-b = decrypt(CIPHER)
-if b == TEST:
-    print("Decryption works!")
+
 
 
 
